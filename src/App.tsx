@@ -5,9 +5,11 @@ import { ProblemList } from './components/ProblemList';
 import { ProblemDetail } from './components/ProblemDetail';
 import { Dashboard } from './components/Dashboard';
 import { Discussion } from './components/Discussion';
+import { ContestPage } from './components/ContestPage';
+import { SubmissionsPage } from './components/SubmissionsPage';
 
 function App() {
-  const [currentView, setCurrentView] = useState<'problems' | 'problem-detail' | 'dashboard' | 'discussion'>('problems');
+  const [currentView, setCurrentView] = useState<'problems' | 'problem-detail' | 'dashboard' | 'discussion' | 'contests' | 'submissions'>('problems');
   const [selectedProblemId, setSelectedProblemId] = useState<string | null>(null);
   const [selectedProblemTitle, setSelectedProblemTitle] = useState<string>('');
 
@@ -49,6 +51,14 @@ function App() {
         )}
 
         {currentView === 'dashboard' && <Dashboard />}
+
+        {currentView === 'contests' && (
+          <ContestPage onBack={() => setCurrentView('problems')} />
+        )}
+
+        {currentView === 'submissions' && (
+          <SubmissionsPage onBack={() => setCurrentView('dashboard')} />
+        )}
 
         {currentView === 'discussion' && selectedProblemId && (
           <Discussion

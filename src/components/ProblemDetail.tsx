@@ -3,6 +3,7 @@ import { ArrowLeft, ThumbsUp, MessageCircle, Lightbulb, CheckCircle, XCircle } f
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { CodeEditor } from './CodeEditor';
+import { Chatbot } from './Chatbot';
 
 interface Problem {
   id: string;
@@ -229,6 +230,8 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
           </div>
         </div>
       </div>
+
+      <Chatbot problemId={problemId} problemTitle={problem.title} />
 
       <div className="flex-1 flex overflow-hidden">
         <div className="w-1/2 border-r border-gray-200 flex flex-col overflow-hidden">

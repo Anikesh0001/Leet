@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Code2, User, LogOut } from 'lucide-react';
+import { Code2, User, LogOut, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from './AuthModal';
 
@@ -36,6 +36,17 @@ export function Navbar({ currentView, onViewChange }: NavbarProps) {
                   }`}
                 >
                   Problems
+                </button>
+                <button
+                  onClick={() => onViewChange('contests')}
+                  className={`px-4 py-2 rounded-lg font-medium transition flex items-center space-x-1 ${
+                    currentView === 'contests'
+                      ? 'bg-gray-100 text-gray-900'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Zap size={16} />
+                  <span>Contests</span>
                 </button>
                 {user && (
                   <>
