@@ -32,6 +32,62 @@ async function seedAdmin() {
 }
 
 seedAdmin();
+// Seed some demo logs for fresh clones so `logs/proctor.db` contains example entries.
+async function seedInitialLogs() {
+  try {
+    const db = await dbModule.getDb();
+    const row = await db.get('SELECT COUNT(1) as c FROM suspicious_logs');
+    const count = row && row.c ? row.c : 0;
+    if (count > 0) return; // already has logs
+
+    // ensure there is a demo non-admin user to attach logs to
+    let demo = await db.get('SELECT * FROM users WHERE username = ?', 'test_user');
+    if (!demo) {
+      const hash = await bcrypt.hash('test123', 10);
+      const info = await db.run('INSERT INTO users (username, email, name, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, 0, ?)', 'test_user', null, 'Demo User', hash, new Date().toISOString());
+      demo = { id: info.lastID, username: 'test_user' };
+      console.log('Seeded demo user: test_user');
+    }
+
+    const now = new Date().toISOString();
+    const sampleLogs = [
+      {
+        user_id: demo.id,
+        problem_id: 'demo-problem-1',
+        event_type: 'tab_switch',
+        payload: JSON.stringify({ reason: 'switched_tab', suspicious: true }),
+        timestamp: now,
+        received_at: now
+      },
+      {
+        user_id: demo.id,
+        problem_id: 'demo-problem-1',
+        event_type: 'no_person',
+        payload: JSON.stringify({ reason: 'no_person_detected', suspicious: true }),
+        timestamp: now,
+        received_at: now
+      },
+      {
+        user_id: demo.id,
+        problem_id: 'demo-problem-2',
+        event_type: 'suspicious_detected',
+        payload: JSON.stringify({ details: 'face_not_visible', suspicious: true }),
+        timestamp: now,
+        received_at: now
+      }
+    ];
+
+    for (const l of sampleLogs) {
+      await db.run('INSERT INTO suspicious_logs (user_id, problem_id, event_type, payload, timestamp, received_at) VALUES (?, ?, ?, ?, ?, ?)', l.user_id, l.problem_id, l.event_type, l.payload, l.timestamp, l.received_at);
+    }
+    console.log('Seeded initial suspicious_logs entries');
+  } catch (e) {
+    console.warn('Failed to seed initial logs', e);
+  }
+}
+
+// run initial logs seed after admin seed
+seedInitialLogs();
 
 // auth helpers
 function createToken(user) {

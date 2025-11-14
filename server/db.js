@@ -1,8 +1,17 @@
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import path from 'path';
+import fs from 'fs';
 
 const DB_PATH = path.join(process.cwd(), 'logs', 'proctor.db');
+
+// ensure the logs directory exists so sqlite can create the DB file
+const DB_DIR = path.dirname(DB_PATH);
+try {
+  if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
+} catch (e) {
+  console.warn('Could not ensure logs directory exists', e);
+}
 
 export async function getDb() {
   const db = await open({ filename: DB_PATH, driver: sqlite3.Database });
