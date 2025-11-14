@@ -31,8 +31,11 @@ async function seedAdmin() {
   }
 }
 
+// Seed admin by default on server start so a local admin is available.
+// (If you prefer opt-in seeding remove this line or set SEED_ADMIN to control behavior.)
 seedAdmin();
-// Seed some demo logs for fresh clones so `logs/proctor.db` contains example entries.
+
+// Seed some demo logs for fresh clones only when explicitly requested.
 async function seedInitialLogs() {
   try {
     const db = await dbModule.getDb();
@@ -86,8 +89,10 @@ async function seedInitialLogs() {
   }
 }
 
-// run initial logs seed after admin seed
-seedInitialLogs();
+if (process.env.SEED_SAMPLE_DATA === 'true') {
+  // run initial logs seed after admin seed (if both enabled)
+  seedInitialLogs();
+}
 
 // auth helpers
 function createToken(user) {
