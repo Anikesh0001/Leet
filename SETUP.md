@@ -37,9 +37,33 @@ npm install
 
 This will download and install all required packages from `package.json`.
 
-### Step 3: Configure Environment Variables (Optional)
+### Step 3: Seed Admin User (Required Before Running Server)
 
-Create a `.env` file in the project root with custom admin credentials:
+Before starting the server for the first time, seed the admin user. This creates admin credentials in your local database.
+
+```bash
+# Seed admin user (creates admin/admin123 in logs/proctor.db)
+npm run seed
+
+# Optionally include sample logs for testing
+SEED_SAMPLE_DATA=true npm run seed
+
+# Or use custom admin credentials
+ADMIN_USER=alice ADMIN_PASS=MySecretPass123 npm run seed
+```
+
+You should see output like:
+```
+🌱 Seeding database...
+✅ Created admin user: admin (password: admin123)
+✨ Database seeding complete!
+```
+
+**Important:** This step creates your local `logs/proctor.db` file with admin credentials. This database is **never shared** via Git — each clone gets its own fresh database.
+
+### Step 4: Configure Environment Variables (Optional)
+
+Create a `.env` file in the project root with custom credentials:
 
 ```bash
 # Create .env file
@@ -56,7 +80,7 @@ EOF
 - Admin Password: `admin123`
 - Server Port: `4000`
 
-### Step 4: Start the Backend Server
+### Step 5: Start the Backend Server
 
 ```bash
 # Terminal 1: Start backend server
@@ -65,11 +89,10 @@ npm run server
 
 You should see:
 ```
-Seeded admin user: admin
 Server listening on http://localhost:4000
 ```
 
-### Step 5: Start the Frontend Dev Server
+### Step 6: Start the Frontend Dev Server
 
 ```bash
 # Terminal 2: Start frontend (keep terminal 1 running)
@@ -230,6 +253,9 @@ Leet/
 ## Available Scripts
 
 ```bash
+# Seed admin user in local database (required on first setup)
+npm run seed
+
 # Start backend server
 npm run server
 
@@ -333,10 +359,12 @@ Use cloud storage (Google Drive, Dropbox, OneDrive):
 
 ## Important Notes
 
-- **Admin credentials** in `.env` are for local/dev use only. For production, use secure environment variables.
-- **Database** (`logs/proctor.db`) is created automatically on first run.
-- **Logs folder** (`logs/`) should exist before running the server. It's created automatically.
+- **Admin credentials** are created locally via `npm run seed` and stored in your clone's `logs/proctor.db` only.
+- **Database** (`logs/proctor.db`) is created on first server run after seeding. It is **never shared** via Git.
+- **Logs folder** (`logs/`) is tracked (empty placeholder `.gitkeep` present) so it exists after clone, but database files remain local to each clone.
 - **Port 4000 and 5173** must be available on the machine.
+- **Fresh clones**: When someone clones this repo, they get no credentials. They must run `npm run seed` first to create admin locally.
+- **Data isolation**: Each clone has its own separate `logs/proctor.db` file. Sign-ups in one clone do not appear in another clone's database.
 
 ## Next Steps
 

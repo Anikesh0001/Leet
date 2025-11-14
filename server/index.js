@@ -31,9 +31,11 @@ async function seedAdmin() {
   }
 }
 
-// Seed admin by default on server start so a local admin is available.
-// (If you prefer opt-in seeding remove this line or set SEED_ADMIN to control behavior.)
-seedAdmin();
+// Seed admin only if explicitly requested via SEED_ADMIN env var or npm run seed script.
+// This ensures fresh clones have no credentials until the developer explicitly seeds them.
+if (process.env.SEED_ADMIN === 'true') {
+  seedAdmin();
+}
 
 // Seed some demo logs for fresh clones only when explicitly requested.
 async function seedInitialLogs() {

@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "import-logs": "node scripts/import_logs_to_repo.js",
-    "server": "node server/index.js"
+    "server": "node server/index.js",
+    "seed": "node scripts/seed.js"
   },
   "files": [
     "scripts/import_logs_to_repo.js"
