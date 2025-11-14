@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, Award, Flame, CheckCircle, Clock, Zap } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import localdb from '../lib/localdb';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Stats {
@@ -13,13 +13,7 @@ interface Stats {
   ranking: number;
 }
 
-interface RecentSubmission {
-  id: string;
-  problem_title: string;
-  status: string;
-  language: string;
-  created_at: string;
-}
+// RecentSubmission: preview of recent submissions omitted in this demo
 
 interface ContestScore {
   id: string;
@@ -42,7 +36,7 @@ export function Dashboard() {
     streakDays: 0,
     ranking: 0
   });
-  const [recentSubmissions, setRecentSubmissions] = useState<RecentSubmission[]>([]);
+  
   const [contestScores, setContestScores] = useState<ContestScore[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -54,68 +48,22 @@ export function Dashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const { data: progressData } = await supabase
-        .from('user_progress')
-        .select(`
-          *,
-          problems:problem_id (
-            difficulty
-          )
-        `)
-        .eq('user_id', user?.id)
-        .eq('status', 'solved');
-
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', user?.id)
-        .single();
-
-      const { data: submissions } = await supabase
-        .from('submissions')
-        .select(`
-          id,
-          status,
-          language,
-          created_at,
-          problems:problem_id (
-            title
-          )
-        `)
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      const { data: contests } = await supabase
-        .from('contest_attempts')
-        .select(`
-          id,
-          score,
-          problems_solved,
-          total_problems,
-          created_at,
-          contests:contest_id (
-            title,
-            max_score
-          )
-        `)
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
+      const { progress, submissions, profile } = await localdb.getDashboardDataForUser(user!.id);
 
       let easySolved = 0;
       let mediumSolved = 0;
       let hardSolved = 0;
 
-      progressData?.forEach((progress: any) => {
-        const difficulty = progress.problems?.difficulty;
-        if (difficulty === 'easy') easySolved++;
-        else if (difficulty === 'medium') mediumSolved++;
-        else if (difficulty === 'hard') hardSolved++;
+      progress?.forEach((p: any) => {
+        // difficulty info might not be available in the minimal demo
+        const d = p.difficulty;
+        if (d === 'easy') easySolved++;
+        else if (d === 'medium') mediumSolved++;
+        else if (d === 'hard') hardSolved++;
       });
 
       setStats({
-        totalSolved: progressData?.length || 0,
+        totalSolved: progress?.length || 0,
         easySolved,
         mediumSolved,
         hardSolved,
@@ -124,27 +72,9 @@ export function Dashboard() {
         ranking: profile?.ranking || 0
       });
 
-      setRecentSubmissions(
-        submissions?.map((sub: any) => ({
-          id: sub.id,
-          problem_title: sub.problems?.title || 'Unknown',
-          status: sub.status,
-          language: sub.language,
-          created_at: sub.created_at
-        })) || []
-      );
+      // recent submissions preview omitted in this demo
 
-      setContestScores(
-        contests?.map((contest: any) => ({
-          id: contest.id,
-          contest_title: contest.contests?.title || 'Contest',
-          score: contest.score,
-          max_score: contest.contests?.max_score || 100,
-          problems_solved: contest.problems_solved,
-          total_problems: contest.total_problems,
-          created_at: contest.created_at
-        })) || []
-      );
+      setContestScores([]);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
@@ -152,11 +82,7 @@ export function Dashboard() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    if (status === 'accepted') return 'text-green-600 bg-green-50';
-    if (status === 'wrong_answer') return 'text-red-600 bg-red-50';
-    return 'text-yellow-600 bg-yellow-50';
-  };
+  
 
   if (loading) {
     return (
@@ -168,10 +94,29 @@ export function Dashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-        <p className="text-gray-600">Track your progress and achievements</p>
+      <div className="flex items-center justify-between mb-8 bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+  <div className="flex items-center space-x-4">
+    <img
+      src="https://avatars.githubusercontent.com/u/yourGithubID?v=4"
+      alt="Profile"
+      className="w-20 h-20 rounded-full border-4 border-blue-500"
+    />
+    <div>
+      <h1 className="text-3xl font-bold text-gray-900">{user?.name || 'User'}</h1>
+      <p className="text-gray-600 text-sm">
+        {user?.email || 'No email provided'}
+      </p>
+      <div className="mt-2 flex space-x-3 text-sm">
+        <span className="text-gray-600">@{user?.username || 'user'}</span>
       </div>
+    </div>
+  </div>
+  <div className="hidden md:block text-right">
+    <p className="text-gray-600 text-sm mb-1">Current Rank</p>
+    <div className="text-2xl font-bold text-blue-600">#{stats.ranking || 1000}</div>
+  </div>
+</div>
+
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white">

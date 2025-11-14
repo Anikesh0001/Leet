@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Clock } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import localdb from '../lib/localdb';
 import { useAuth } from '../contexts/AuthContext';
 import { ContestCard } from './ContestCard';
 import { ContestRunner } from './ContestRunner';
@@ -20,7 +20,7 @@ interface ContestPageProps {
 }
 
 export function ContestPage({ onBack }: ContestPageProps) {
-  const { user } = useAuth();
+  useAuth();
   const [contests, setContests] = useState<Contest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedContest, setSelectedContest] = useState<Contest | null>(null);
@@ -32,14 +32,8 @@ export function ContestPage({ onBack }: ContestPageProps) {
 
   const loadContests = async () => {
     try {
-      const { data, error } = await supabase
-        .from('contests')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at');
-
-      if (error) throw error;
-      setContests(data || []);
+      const data = await localdb.getContests();
+      setContests((data || []).map((c: any) => ({ ...c, difficulty: c.difficulty as 'easy' | 'medium' | 'hard' })));
     } catch (error) {
       console.error('Error loading contests:', error);
     } finally {

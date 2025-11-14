@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Filter, Zap, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import localdb from '../lib/localdb';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Submission {
@@ -41,50 +41,16 @@ export function SubmissionsPage({ onBack }: SubmissionsPageProps) {
 
   const loadSubmissions = async () => {
     try {
-      const { data: regularSubmissions } = await supabase
-        .from('submissions')
-        .select(`
-          id,
-          status,
-          language,
-          runtime_ms,
-          memory_kb,
-          test_cases_passed,
-          test_cases_total,
-          created_at,
-          problems:problem_id (
-            title
-          )
-        `)
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false });
-
-      const { data: contestSubmissions } = await supabase
-        .from('contest_submissions')
-        .select(`
-          id,
-          status,
-          language,
-          score,
-          submitted_at,
-          problems:problem_id (
-            title
-          ),
-          contest_attempts:attempt_id (
-            user_id
-          )
-        `)
-        .eq('contest_attempts.user_id', user?.id);
-
-      const mapped: Submission[] = (regularSubmissions || []).map((sub: any) => ({
+      const subs = await localdb.getAllSubmissionsForUser(user!.id);
+      const mapped: Submission[] = (subs || []).map((sub: any) => ({
         id: sub.id,
-        problem_title: sub.problems?.title || 'Unknown',
+        problem_title: sub.problem_id || sub.problem_title || 'Unknown',
         status: sub.status,
         language: sub.language,
-        runtime_ms: sub.runtime_ms,
-        memory_kb: sub.memory_kb,
-        test_cases_passed: sub.test_cases_passed,
-        test_cases_total: sub.test_cases_total,
+        runtime_ms: sub.runtime_ms || 0,
+        memory_kb: sub.memory_kb || 0,
+        test_cases_passed: sub.test_cases_passed || 0,
+        test_cases_total: sub.test_cases_total || 0,
         created_at: sub.created_at,
         is_contest: false
       }));

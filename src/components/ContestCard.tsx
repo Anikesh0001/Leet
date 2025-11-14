@@ -1,4 +1,4 @@
-import { Clock, Award, Zap, Users } from 'lucide-react';
+import { Clock, Award, Zap } from 'lucide-react';
 
 interface ContestCardProps {
   id: string;

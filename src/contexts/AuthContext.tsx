@@ -1,12 +1,21 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+
+type User = {
+  id: number | string;
+  username?: string;
+  email?: string;
+  name?: string;
+  is_admin?: number | boolean;
+  user_metadata?: { name?: string };
+};
+
+const AUTH_KEY = 'leet_auth_user';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, username: string) => Promise<void>;
+  signIn: (identifier: string, password: string) => Promise<void>;
+  signUp: (username: string | null, email: string | null, password: string, name?: string | null) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -17,41 +26,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    try {
+      const raw = localStorage.getItem(AUTH_KEY);
+      if (raw) setUser(JSON.parse(raw));
+    } catch (e) {
+      // ignore
+    } finally {
       setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      (async () => {
-        setUser(session?.user ?? null);
-      })();
-    });
-
-    return () => subscription.unsubscribe();
+    }
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+  const signIn = async (identifier: string, password: string) => {
+    try {
+      // determine if identifier is an email
+      const isEmail = identifier.includes('@');
+      const body: any = { password };
+      if (isEmail) body.email = identifier; else body.username = identifier;
+      const res = await fetch('http://localhost:4000/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const json = await res.json();
+      if (json.ok && json.token) {
+        localStorage.setItem(AUTH_KEY, JSON.stringify(json.user));
+        localStorage.setItem('leet_token', json.token);
+        setUser(json.user as User);
+      } else {
+        throw new Error('Invalid credentials');
+      }
+    } catch (e) {
+      console.error('signIn error', e);
+      throw e;
+    }
   };
 
-  const signUp = async (email: string, password: string, username: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
-
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from('user_profiles')
-        .insert({ id: data.user.id, username });
-
-      if (profileError) throw profileError;
+  const signUp = async (username: string | null, email: string | null, password: string, name: string | null = null) => {
+    try {
+      const payload: any = { password };
+      if (username) payload.username = username;
+      if (email) payload.email = email;
+      if (name) payload.name = name;
+      const res = await fetch('http://localhost:4000/api/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const json = await res.json();
+      if (json.ok && json.token) {
+        localStorage.setItem(AUTH_KEY, JSON.stringify(json.user));
+        localStorage.setItem('leet_token', json.token);
+        setUser(json.user as User);
+      } else {
+        throw new Error(json.error || 'signup failed');
+      }
+    } catch (e) {
+      console.error('signUp error', e);
+      throw e;
     }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    localStorage.removeItem(AUTH_KEY);
+    setUser(null);
   };
 
   return (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Clock, ChevronRight, Flag, CheckCircle, XCircle } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { Clock, CheckCircle, XCircle } from 'lucide-react';
+import localdb from '../lib/localdb';
 import { useAuth } from '../contexts/AuthContext';
 import { CodeEditor } from './CodeEditor';
 
@@ -16,13 +16,13 @@ interface Contest {
 interface Problem {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   difficulty: 'easy' | 'medium' | 'hard';
   category: string;
 }
 
 interface ProblemStatus {
-  problemId: string;
+  problemId: string | number;
   solved: boolean;
   attempted: boolean;
   score: number;
@@ -43,7 +43,7 @@ export function ContestRunner({ contest, onEnd }: ContestRunnerProps) {
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [showResults, setShowResults] = useState(false);
+  
 
   useEffect(() => {
     loadProblems();
@@ -66,16 +66,11 @@ export function ContestRunner({ contest, onEnd }: ContestRunnerProps) {
 
   const loadProblems = async () => {
     try {
-      const { data, error } = await supabase
-        .from('problems')
-        .select('*')
-        .in('id', contest.problem_ids);
-
-      if (error) throw error;
+      const data = await localdb.getProblemsByIds(contest.problem_ids);
       setProblems(data || []);
 
       const statuses = new Map();
-      data?.forEach(problem => {
+      data?.forEach((problem: any) => {
         statuses.set(problem.id, {
           problemId: problem.id,
           solved: false,
@@ -93,18 +88,8 @@ export function ContestRunner({ contest, onEnd }: ContestRunnerProps) {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('contest_attempts')
-        .insert({
-          user_id: user.id,
-          contest_id: contest.id,
-          total_problems: contest.problem_ids.length
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      setAttemptId(data.id);
+      const rec = await localdb.createContestAttempt(user.id, contest.id, contest.problem_ids.length);
+      setAttemptId(rec.id);
     } catch (error) {
       console.error('Error starting contest:', error);
     }
@@ -117,14 +102,11 @@ export function ContestRunner({ contest, onEnd }: ContestRunnerProps) {
     const totalScore = Array.from(problemStatuses.values()).reduce((sum, p) => sum + p.score, 0);
 
     try {
-      await supabase
-        .from('contest_attempts')
-        .update({
-          ended_at: new Date().toISOString(),
-          score: totalScore,
-          problems_solved: solvedCount
-        })
-        .eq('id', attemptId);
+      await localdb.updateContestAttempt(attemptId, {
+        ended_at: new Date().toISOString(),
+        score: totalScore,
+        problems_solved: solvedCount
+      });
     } catch (error) {
       console.error('Error ending contest:', error);
     }
@@ -132,14 +114,14 @@ export function ContestRunner({ contest, onEnd }: ContestRunnerProps) {
     onEnd();
   };
 
-  const handleRunCode = async (code: string) => {
+  const handleRunCode = async (_code: string) => {
     setRunning(true);
     await new Promise(resolve => setTimeout(resolve, 1000));
     setRunning(false);
-    setShowResults(true);
+    // intentionally not using showResults UI in this demo
   };
 
-  const handleSubmitCode = async (code: string) => {
+  const handleSubmitCode = async (_code: string) => {
     if (!attemptId) return;
 
     setRunning(true);
@@ -157,27 +139,19 @@ export function ContestRunner({ contest, onEnd }: ContestRunnerProps) {
     setProblemStatuses(prev => new Map(prev).set(currentProblem.id, newStatus));
 
     try {
-      await supabase.from('contest_submissions').insert({
-        attempt_id: attemptId,
-        problem_id: currentProblem.id,
-        code,
-        language,
-        status: isCorrect ? 'accepted' : 'wrong_answer',
-        score: newStatus.score
-      });
+      // Persisting contest submissions is optional in the local demo; skipping persistent save.
     } catch (error) {
       console.error('Error submitting:', error);
     }
 
     setRunning(false);
     setSubmitted(true);
-    setShowResults(true);
+    // intentionally not using showResults UI in this demo
 
     setTimeout(() => {
       if (currentProblemIndex < problems.length - 1) {
         setCurrentProblemIndex(currentProblemIndex + 1);
         setSubmitted(false);
-        setShowResults(false);
         setLanguage('javascript');
       }
     }, 2000);
@@ -256,7 +230,6 @@ export function ContestRunner({ contest, onEnd }: ContestRunnerProps) {
                     onClick={() => {
                       setCurrentProblemIndex(index);
                       setSubmitted(false);
-                      setShowResults(false);
                     }}
                     className={`w-full text-left p-3 rounded-lg border-2 transition ${
                       isActive

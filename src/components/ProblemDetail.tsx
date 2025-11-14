@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ThumbsUp, MessageCircle, Lightbulb, CheckCircle, XCircle } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import localdb from '../lib/localdb';
+import ProctorPanel from './ProctorPanel';
 import { useAuth } from '../contexts/AuthContext';
 import { CodeEditor } from './CodeEditor';
 import { Chatbot } from './Chatbot';
@@ -30,12 +31,13 @@ interface TestResult {
 }
 
 interface ProblemDetailProps {
-  problemId: string;
+  problemId: string | number;
+  problemTitle?: string;
   onBack: () => void;
   onDiscussionOpen: () => void;
 }
 
-export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDetailProps) {
+export function ProblemDetail({ problemId, problemTitle, onBack, onDiscussionOpen }: ProblemDetailProps) {
   const { user } = useAuth();
   const [problem, setProblem] = useState<Problem | null>(null);
   const [hints, setHints] = useState<Hint[]>([]);
@@ -46,22 +48,18 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [showResults, setShowResults] = useState(false);
   const [activeTab, setActiveTab] = useState<'description' | 'hints' | 'submissions'>('description');
+  // Auto-enable proctor for exam mode when opening a problem
+  const [proctorVisible, setProctorVisible] = useState(true);
 
   useEffect(() => {
     loadProblem();
     loadHints();
-  }, [problemId]);
+  }, [String(problemId)]);
 
   const loadProblem = async () => {
     try {
-      const { data, error } = await supabase
-        .from('problems')
-        .select('*')
-        .eq('id', problemId)
-        .single();
-
-      if (error) throw error;
-      setProblem(data);
+      const data = await localdb.getProblemById(problemId);
+      setProblem(data as any);
     } catch (error) {
       console.error('Error loading problem:', error);
     } finally {
@@ -71,20 +69,14 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
 
   const loadHints = async () => {
     try {
-      const { data, error } = await supabase
-        .from('hints')
-        .select('*')
-        .eq('problem_id', problemId)
-        .order('hint_order');
-
-      if (error) throw error;
+      const data = await localdb.getHintsByProblemId(problemId);
       setHints(data || []);
     } catch (error) {
       console.error('Error loading hints:', error);
     }
   };
 
-  const handleRun = async (code: string) => {
+  const handleRun = async (_code: string) => {
     setRunning(true);
     setShowResults(true);
 
@@ -139,7 +131,7 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
     setTestResults(mockResults);
 
     try {
-      const { error } = await supabase.from('submissions').insert({
+      await localdb.insertSubmission({
         user_id: user.id,
         problem_id: problemId,
         code,
@@ -148,25 +140,18 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
         runtime_ms: Math.floor(Math.random() * 100) + 50,
         memory_kb: Math.floor(Math.random() * 1000) + 5000,
         test_cases_passed: allPassed ? 2 : 1,
-        test_cases_total: 2
+        test_cases_total: 2,
+        created_at: new Date().toISOString()
       });
 
-      if (error) throw error;
-
-      const { error: progressError } = await supabase
-        .from('user_progress')
-        .upsert({
-          user_id: user.id,
-          problem_id: problemId,
-          status: allPassed ? 'solved' : 'attempted',
-          attempts: 1,
-          last_attempted_at: new Date().toISOString(),
-          ...(allPassed && { solved_at: new Date().toISOString() })
-        }, {
-          onConflict: 'user_id,problem_id'
-        });
-
-      if (progressError) throw progressError;
+      await localdb.upsertUserProgress({
+        user_id: user.id,
+        problem_id: problemId,
+        status: allPassed ? 'solved' : 'attempted',
+        attempts: 1,
+        last_attempted_at: new Date().toISOString(),
+        ...(allPassed && { solved_at: new Date().toISOString() })
+      });
     } catch (error) {
       console.error('Error saving submission:', error);
     }
@@ -189,13 +174,45 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
     }
   };
 
-  if (loading || !problem) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-lg text-gray-600">Loading problem...</div>
       </div>
     );
   }
+  // If we don't have the full problem data locally but the app passed the
+  // problem title (from the ProblemList click), use a minimal fallback
+  // so the user can still open any listed problem.
+  let displayProblem: Problem | null = problem;
+  if (!loading && !problem && problemTitle) {
+    displayProblem = {
+      id: String(problemId),
+      title: problemTitle,
+      description: 'No detailed description available for this demo.',
+      difficulty: 'easy',
+      category: 'General',
+      tags: [],
+      likes: 0
+    };
+  }
+
+  if (!loading && !displayProblem) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-6">
+        <div className="text-xl font-semibold text-gray-800 mb-4">Problem not found</div>
+        <div className="text-gray-600 mb-6">We couldn't find the requested problem.</div>
+        <button
+          onClick={onBack}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Back to Problems
+        </button>
+      </div>
+    );
+  }
+
+  const dp = displayProblem as Problem;
 
   const starterCode = {
     javascript: `function solution(nums, target) {\n  // Write your code here\n  \n}\n`,
@@ -218,7 +235,7 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
           <div className="flex items-center space-x-4">
             <button className="flex items-center space-x-1 text-gray-600 hover:text-blue-600">
               <ThumbsUp size={18} />
-              <span className="text-sm">{problem.likes}</span>
+              <span className="text-sm">{dp.likes}</span>
             </button>
             <button
               onClick={onDiscussionOpen}
@@ -227,11 +244,17 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
               <MessageCircle size={18} />
               <span className="text-sm">Discuss</span>
             </button>
+            <button
+              onClick={() => setProctorVisible(!proctorVisible)}
+              className="flex items-center space-x-1 text-gray-600 hover:text-blue-600"
+            >
+              <span className="text-sm">{proctorVisible ? 'Hide Proctor' : 'Start Proctor'}</span>
+            </button>
           </div>
         </div>
       </div>
 
-      <Chatbot problemId={problemId} problemTitle={problem.title} />
+      <Chatbot problemId={problemId} problemTitle={dp.title} />
 
       <div className="flex-1 flex overflow-hidden">
         <div className="w-1/2 border-r border-gray-200 flex flex-col overflow-hidden">
@@ -257,19 +280,19 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
             {activeTab === 'description' && (
               <div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-3">
-                  {problem.title}
+                  {dp.title}
                 </h1>
 
                 <div className="flex items-center space-x-3 mb-6">
-                  <span className={`font-medium ${getDifficultyColor(problem.difficulty)}`}>
-                    {problem.difficulty.charAt(0).toUpperCase() + problem.difficulty.slice(1)}
+                  <span className={`font-medium ${getDifficultyColor(dp.difficulty)}`}>
+                    {dp.difficulty.charAt(0).toUpperCase() + dp.difficulty.slice(1)}
                   </span>
                   <span className="text-gray-400">|</span>
-                  <span className="text-gray-600">{problem.category}</span>
+                  <span className="text-gray-600">{dp.category}</span>
                 </div>
 
                 <div className="flex flex-wrap gap-2 mb-6">
-                  {problem.tags.map(tag => (
+                  {dp.tags.map(tag => (
                     <span
                       key={tag}
                       className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
@@ -282,7 +305,7 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
                 <div className="prose prose-sm max-w-none">
                   <div
                     dangerouslySetInnerHTML={{
-                      __html: problem.description.replace(/\n/g, '<br/>')
+                      __html: dp.description.replace(/\n/g, '<br/>')
                     }}
                   />
                 </div>
@@ -337,6 +360,12 @@ export function ProblemDetail({ problemId, onBack, onDiscussionOpen }: ProblemDe
 
         <div className="w-1/2 flex flex-col">
           <div className="flex-1 flex flex-col">
+            {proctorVisible && (
+              <div className="h-96 overflow-hidden border-b border-gray-200">
+                <ProctorPanel userId={user?.id} problemId={problemId} />
+              </div>
+            )}
+
             <CodeEditor
               initialCode={starterCode[language as keyof typeof starterCode]}
               language={language}

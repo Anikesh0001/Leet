@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, ThumbsUp, MessageCircle, Send, User } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import localdb from '../lib/localdb';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Discussion {
@@ -16,7 +16,7 @@ interface Discussion {
 }
 
 interface DiscussionProps {
-  problemId: string;
+  problemId: string | number;
   problemTitle: string;
   onBack: () => void;
 }
@@ -32,22 +32,11 @@ export function Discussion({ problemId, problemTitle, onBack }: DiscussionProps)
 
   useEffect(() => {
     loadDiscussions();
-  }, [problemId]);
+  }, [String(problemId)]);
 
   const loadDiscussions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('discussions')
-        .select(`
-          *,
-          user_profiles:user_id (
-            username
-          )
-        `)
-        .eq('problem_id', problemId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await localdb.getDiscussions(problemId);
       setDiscussions(data || []);
     } catch (error) {
       console.error('Error loading discussions:', error);
@@ -65,14 +54,13 @@ export function Discussion({ problemId, problemTitle, onBack }: DiscussionProps)
 
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('discussions').insert({
+      await localdb.insertDiscussion({
         problem_id: problemId,
         user_id: user.id,
         title: newTitle,
-        content: newContent
+        content: newContent,
+        user_profiles: { username: user.user_metadata?.name || user.email }
       });
-
-      if (error) throw error;
 
       setNewTitle('');
       setNewContent('');
@@ -96,12 +84,7 @@ export function Discussion({ problemId, problemTitle, onBack }: DiscussionProps)
     if (!discussion) return;
 
     try {
-      const { error } = await supabase
-        .from('discussions')
-        .update({ upvotes: discussion.upvotes + 1 })
-        .eq('id', discussionId);
-
-      if (error) throw error;
+      await localdb.upvoteDiscussion(discussionId);
       loadDiscussions();
     } catch (error) {
       console.error('Error upvoting:', error);
